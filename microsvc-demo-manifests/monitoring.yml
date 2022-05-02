@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoringservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitoringservice
+  template:
+    metadata:
+      labels:
+        app: monitoringservice
+    spec:
+      containers:
+        - name: monitoringservice
+          image: prom/prometheus:v2.33.3
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/prometheus
+            - name: data-volume
+              mountPath: /prometheus
+      volumes:
+        - name: config-volume
+          configMap:
+            defaultMode: 420
+            name: prometheus-conf
+        - name: data-volume
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-conf
+  labels:
+    name: prometheus-conf
+data:
+  prometheus.yml: |-
+    global:
+      scrape_interval:     5s
+      evaluation_interval: 5s
+    scrape_configs:
+      - job_name: 'checkout-go'
+        static_configs:
+          - targets: ['checkoutservice:5051']
+      - job_name: 'email-python'
+        static_configs:
+          - targets: ['emailservice:8081']
+      - job_name: 'product-catalog-go'
+        static_configs:
+          - targets: ['productcatalogservice:3551']
+      - job_name: 'recommendation-python'
+        static_configs:
+          - targets: ['recommendationservice:8081']
+      - job_name: 'shipping-go'
+        static_configs:
+          - targets: ['shippingservice:50052']
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitoringservice
+spec:
+  selector:
+    app: monitoringservice
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+  type: LoadBalancer
+
+# ---
+# apiVersion: apps/v1beta1
+# kind: Deployment
+# metadata:
+#   name: grafana
+# spec:
+#   replicas: 1
+#   template:
+#     metadata:
+#       labels:
+#         app: colossus
+#         component: prometheus
+#     spec:
+#       containers:
+#       - name: grafana
+#         image: grafana/grafana:5.1.0
+#         ports:
+#         - containerPort: 3000
+#         env:
+#         - name: PROMETHEUS_URL
+#           value: https://prometheus:9090/
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: grafana
+#   labels:
+#     app: grafana
+# spec:
+#   ports:
+#   - port: 3000
+#     protocol: TCP
+#     name: server
+#   clusterIP: None
+#   selector:
+#     app: grafana
