@@ -1,0 +1,5 @@
+{
+    "yaml.schemas": {
+        "kubernetes://schema/apps/v1@deployment+v1@configmap+v1@configmap+v1@service": "file:///d%3A/LU%E1%BA%ACN%20%C3%81N/ekstf/microsvc-demo-manifests/prometheus.yml"
+    }
+}

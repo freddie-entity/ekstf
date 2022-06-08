@@ -1,36 +1,38 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: myapp
+  name: grafana
 spec:
   selector:
     matchLabels:
-      app: myapp
+      app: grafana
   template:
     metadata:
       labels:
-        app: myapp
+        app: grafana
     spec:
       containers:
-      - name: myapp
-        image: nginx
+      - name: grafana
+        image: grafana/grafana:8.5.4
         resources:
           limits:
             memory: "128Mi"
             cpu: "500m"
         ports:
-        - containerPort: 80
-
+          - containerPort: 3000
+        env:
+          - name: PROMETHEUS_URL
+            value: 'http://prometheus:9090/'
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: myapp
+  name: grafana
 spec:
   selector:
-    app: myapp
+    app: grafana
   ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
   type: LoadBalancer

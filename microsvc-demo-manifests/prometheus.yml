@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: monitoringservice
+  name: prometheus
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: monitoringservice
+      app: prometheus
   template:
     metadata:
       labels:
-        app: monitoringservice
+        app: prometheus
     spec:
       containers:
-        - name: monitoringservice
+        - name: prometheus
           image: prom/prometheus:v2.33.3
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
@@ -26,6 +26,8 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /etc/prometheus
+            - name: prom-config-volume
+              mountPath: /etc/rules
             - name: data-volume
               mountPath: /prometheus
       volumes:
@@ -33,6 +35,10 @@ spec:
           configMap:
             defaultMode: 420
             name: prometheus-conf
+        - name: prom-config-volume
+          configMap:
+            defaultMode: 420
+            name: prom-rule-conf
         - name: data-volume
           emptyDir: {}
 ---
@@ -47,7 +53,17 @@ data:
     global:
       scrape_interval:     5s
       evaluation_interval: 5s
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager:9093
+    rule_files:
+     - '/etc/rules/prom-rule.yml'
     scrape_configs:
+      - job_name: 'grafana'
+        static_configs:
+          - targets: ['grafana:3000']
       - job_name: 'checkout-go'
         static_configs:
           - targets: ['checkoutservice:5051']
@@ -65,51 +81,47 @@ data:
           - targets: ['shippingservice:50052']
 ---
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prom-rule-conf
+  labels:
+    name: prom-rule-conf
+data:
+  prom-rule.yml: |-
+    groups:
+    - name: prom-rule
+      rules:
+      - record: job:recommendationservice_python_app_response_latency_seconds:rate1m
+        expr: rate(recommendationservice_python_app_response_latency_seconds_sum[1m])
+
+      - alert: RecommendationServiceDown
+        expr: up{instance="recommendationservice:8081"} == 0
+        for: 1m
+        labels:
+          severity: critical
+
+      - alert: RecommendationServiceHighTraffic
+        expr: job:recommendationservice_python_app_response_latency_seconds:rate1m >= 0.1
+        for: 1m
+        labels:
+          severity: warning
+      - alert: RecommendationServiceOverload
+        expr: job:recommendationservice_python_app_response_latency_seconds:rate1m >= 0.25
+        for: 1m
+        labels:
+          severity: critical
+---
+apiVersion: v1
 kind: Service
 metadata:
-  name: monitoringservice
+  name: prometheus
 spec:
   selector:
-    app: monitoringservice
+    app: prometheus
   ports:
     - port: 9090
       targetPort: 9090
       protocol: TCP
   type: LoadBalancer
 
-# ---
-# apiVersion: apps/v1beta1
-# kind: Deployment
-# metadata:
-#   name: grafana
-# spec:
-#   replicas: 1
-#   template:
-#     metadata:
-#       labels:
-#         app: colossus
-#         component: prometheus
-#     spec:
-#       containers:
-#       - name: grafana
-#         image: grafana/grafana:5.1.0
-#         ports:
-#         - containerPort: 3000
-#         env:
-#         - name: PROMETHEUS_URL
-#           value: https://prometheus:9090/
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: grafana
-#   labels:
-#     app: grafana
-# spec:
-#   ports:
-#   - port: 3000
-#     protocol: TCP
-#     name: server
-#   clusterIP: None
-#   selector:
-#     app: grafana
+
